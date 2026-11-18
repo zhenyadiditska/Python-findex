@@ -14,3 +14,7 @@ data/
 
 # Pytest cache
 .pytest_cache/
+
+# Generated indexes
+index.bin
+index.json
