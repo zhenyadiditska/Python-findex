@@ -1,47 +1,30 @@
-
-from dataclasses import dataclass
 from pathlib import Path
-from collections import defaultdict, Counter
+from collections import defaultdict
 import pickle
 import json
 import time
 import argparse
 import tracemalloc
-import sys
 
-
-@dataclass(frozen=True, slots=True)
-class Posting:
-    doc_id: str
-    frequency: int
-
-
-@dataclass(frozen=True, slots=True)
-class DocMeta:
-    doc_id: str
-    path: str
-    length: int
-
-
-if __name__ == "__main__":
-    sys.modules["findex.index"] = sys.modules["__main__"]
-    Posting.__module__ = "findex.index"
-    DocMeta.__module__ = "findex.index"
-
-
+from findex.index_model import Index, Posting, DocMeta
 from findex.corpus import iter_documents
-from findex.tokenize import tokenize
+from findex.tokenize import tokenize_with_positions
+from findex.decorators import timed
 
 
+@timed
 def build_index(data_dir: Path):
-    index = defaultdict(Counter)
+    index = defaultdict(dict)
     documents = {}
 
     for document in iter_documents(data_dir):
         token_count = 0
 
-        for token in tokenize(document.text):
-            index[token][document.doc_id] += 1
+        for token, position in tokenize_with_positions(document.text):
+            if document.doc_id not in index[token]:
+                index[token][document.doc_id] = []
+
+            index[token][document.doc_id].append(position)
             token_count += 1
 
         documents[document.doc_id] = DocMeta(
@@ -52,34 +35,39 @@ def build_index(data_dir: Path):
 
     sorted_index = {}
 
-    for term, frequencies in index.items():
+    for term, document_positions in index.items():
         sorted_index[term] = [
-            Posting(doc_id, frequency)
-            for doc_id, frequency in sorted(frequencies.items())
+            Posting(
+                doc_id=doc_id,
+                frequency=len(positions),
+                positions=tuple(positions)
+            )
+            for doc_id, positions in sorted(document_positions.items())
         ]
 
-    return sorted_index, documents
+    return Index(sorted_index, documents)
 
 
-def save_index(index, documents, output_path: Path):
-    # Не можна завантажувати pickle-файли з невідомих джерел:
-    # вони можуть містити небезпечний код.
+def save_index(index, output_path: Path):
+    # Не завантажуй pickle-файли з невідомих джерел.
     with output_path.open("wb") as file:
-        pickle.dump((index, documents), file)
+        pickle.dump(index, file)
 
 
+@timed
 def load_index(input_path: Path):
     with input_path.open("rb") as file:
         return pickle.load(file)
 
 
-def save_index_json(index, documents, output_path: Path):
+def save_index_json(index, output_path: Path):
     data = {
         "index": {
             term: [
                 {
                     "doc_id": posting.doc_id,
-                    "frequency": posting.frequency
+                    "frequency": posting.frequency,
+                    "positions": list(posting.positions)
                 }
                 for posting in postings
             ]
@@ -91,7 +79,7 @@ def save_index_json(index, documents, output_path: Path):
                 "path": meta.path,
                 "length": meta.length
             }
-            for doc_id, meta in documents.items()
+            for doc_id, meta in index.documents.items()
         }
     }
 
@@ -103,12 +91,16 @@ def load_index_json(input_path: Path):
     with input_path.open("r", encoding="utf-8") as file:
         data = json.load(file)
 
-    index = {
+    postings = {
         term: [
-            Posting(item["doc_id"], item["frequency"])
-            for item in postings
+            Posting(
+                item["doc_id"],
+                item["frequency"],
+                tuple(item.get("positions", []))
+            )
+            for item in items
         ]
-        for term, postings in data["index"].items()
+        for term, items in data["index"].items()
     }
 
     documents = {
@@ -120,7 +112,7 @@ def load_index_json(input_path: Path):
         for doc_id, meta in data["documents"].items()
     }
 
-    return index, documents
+    return Index(postings, documents)
 
 
 def main():
@@ -133,15 +125,16 @@ def main():
     tracemalloc.start()
     start = time.perf_counter()
 
-    index, documents = build_index(args.data_dir)
+    index = build_index(args.data_dir)
+    documents = index.documents
     build_time = time.perf_counter() - start
 
     start = time.perf_counter()
-    save_index(index, documents, args.out)
+    save_index(index, args.out)
     pickle_save_time = time.perf_counter() - start
 
     start = time.perf_counter()
-    save_index_json(index, documents, args.json_out)
+    save_index_json(index, args.json_out)
     json_save_time = time.perf_counter() - start
 
     _, peak_memory = tracemalloc.get_traced_memory()

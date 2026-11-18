@@ -146,3 +146,68 @@ Greedy-версія спочатку завантажує всі докумен�
 Формат JSON зручний тим, що його можна переглянути звичайним текстовим редактором. Файл `pickle` займає менше місця та швидше завантажується в проведеному тесті.
 
 Важливо: файли `pickle` не можна завантажувати з невідомих або ненадійних джерел
+
+## Lab 03 — Ranking and Object Model
+
+### 1. Model indeksu
+
+Klasa `Index` udostępnia:
+- `__len__`, `__contains__`, `__getitem__`, `__iter__`, `__repr__`
+- `num_docs`, `avg_doc_length`, `doc_length()` i `df()`
+- `open_index()` jako context manager.
+
+### 2. Ranking
+
+Zaimplementowano dwa algorytmy:
+- TF-IDF
+- BM25 z parametrami `k1=1.5` i `b=0.75`.
+
+Wyniki są przechowywane w `SearchResult`, a najlepsze dokumenty wybierane przez `heapq.nlargest()`.
+
+### 3. Parser zapytań
+
+Parser obsługuje:
+- AND, OR i NOT
+- niejawne AND między sąsiednimi terminami
+- nawiasy
+- wyszukiwanie fraz w cudzysłowie.
+
+Przykład:
+
+`python AND (async OR await) NOT java "event loop"`
+
+### 4. Cache, dekoratory i snippets
+
+- `@timed` mierzy czas wykonywania funkcji.
+- `lru_cache(maxsize=256)` przechowuje wyniki zapytań.
+- `make_snippet()` tworzy fragment tekstu i wyróżnia znalezione słowa.
+
+### 5. Eksperymenty z rankingiem
+
+Indeks zawiera 1218 dokumentów i 56895 unikalnych terminów.
+
+Przeprowadzono trzy testy:
+
+1. Rzadki termin `flask` (DF=1) uzyskał wyższą ocenę niż częsty termin `in` (DF=1176).
+2. W BM25 różnica ocen między 19. a 20. powtórzeniem terminu wyniosła około 0.00011.
+3. Dla terminu `models`, występującego po jednym razu w obu dokumentach, krótki документ uzyskał ocenę 2.7183, a długi — 0.0244.
+
+### 6. Precision@5
+
+Przeprowadzono ocenę 10 zapytań z ręcznie określoną релевантністю документів.
+
+| Zapytanie | TF-IDF | BM25 |
+|---|---:|---:|
+| python | 0.80 | 1.00 |
+| django | 1.00 | 1.00 |
+| async | 1.00 | 1.00 |
+| database | 1.00 | 1.00 |
+| security | 0.60 | 1.00 |
+| testing | 0.80 | 0.60 |
+| template | 1.00 | 1.00 |
+| request | 0.60 | 1.00 |
+| class AND method | 0.80 | 1.00 |
+| "event loop" | 0.60 | 0.80 |
+| **Średnia** | **0.82** | **0.94** |
+
+W tym eksperymencie BM25 uzyskał wyższy średni Precision@5 niż TF-IDF. Wyniki zależą od ręcznej oceny trafności dokumentów.

@@ -1,22 +1,27 @@
-
 import re
 import unicodedata
 from typing import Iterator
 
 
-def tokenize(text: str) -> Iterator[str]:
-    """
-    Split text into tokens.
+PATTERN = r"[^\W_]+(?:['’\-][^\W_]+)*"
 
-    Apostrophes and hyphens are kept inside words.
-    Digits are treated as part of tokens.
-    Punctuation and underscores are ignored.
+
+def tokenize_with_positions(text: str) -> Iterator[tuple[str, int]]:
+    """
+    Split text into tokens and return their positions.
     """
 
     text = unicodedata.normalize("NFC", text)
     text = text.casefold()
 
-    pattern = r"[^\W_]+(?:['’\-][^\W_]+)*"
+    for position, match in enumerate(re.finditer(PATTERN, text)):
+        yield match.group(), position
 
-    for match in re.finditer(pattern, text):
-        yield match.group()
+
+def tokenize(text: str) -> Iterator[str]:
+    """
+    Split text into tokens.
+    """
+
+    for token, _ in tokenize_with_positions(text):
+        yield token

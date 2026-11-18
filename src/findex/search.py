@@ -1,10 +1,15 @@
-
 import argparse
 import time
 import tracemalloc
 from pathlib import Path
+from heapq import nlargest
 
-from findex.index import load_index
+from findex.index_model import open_index
+from findex.scoring import TfIdf, BM25, SearchResult
+from findex.decorators import timed
+from findex.query import Term, Phrase, And, Or, Not, parse_query
+from findex.snippets import make_snippet
+from findex.cache import cached_query
 
 
 def merge_and(left, right):
@@ -80,7 +85,7 @@ def merge_difference(left, right):
     return result
 
 
-def search_documents(query, index, documents, engine="merge"):
+def search_documents(query, index, documents=None, engine="merge"):
     terms = query.casefold().split()
 
     if not terms:
@@ -119,30 +124,102 @@ def search_documents(query, index, documents, engine="merge"):
     return [p.doc_id for p in result]
 
 
+def collect_terms(node, negated=False):
+    if isinstance(node, Term):
+        return [] if negated else [node.value.casefold()]
+
+    if isinstance(node, Phrase):
+        return [] if negated else node.value.casefold().split()
+
+    if isinstance(node, Not):
+        return collect_terms(node.node, not negated)
+
+    if isinstance(node, (And, Or)):
+        return (
+            collect_terms(node.left, negated)
+            + collect_terms(node.right, negated)
+        )
+
+    return []
+
+
+@timed
+def rank_documents(query, index, scorer=None, top_k=10):
+    if scorer is None:
+        scorer = TfIdf()
+
+    tree = parse_query(query)
+    matching_documents = set(cached_query(query, index))
+
+    if not matching_documents:
+        return []
+
+    terms = collect_terms(tree)
+    scores = {doc_id: 0.0 for doc_id in matching_documents}
+
+    for term in terms:
+        for posting in index.get(term, []):
+            if posting.doc_id in matching_documents:
+                score = scorer.score(term, posting, index)
+                scores[posting.doc_id] += score
+
+    results = [
+        SearchResult(
+            doc_id=doc_id,
+            score=score,
+            title=index.documents[doc_id].path.split("/")[-1]
+        )
+        for doc_id, score in scores.items()
+    ]
+
+    return nlargest(top_k, results)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Search an inverted index")
     parser.add_argument("index_file", type=Path)
     parser.add_argument("query")
     parser.add_argument("--engine", choices=["merge", "set"], default="merge")
+    parser.add_argument("--scorer", choices=["tfidf", "bm25"], default="tfidf")
+    parser.add_argument("--top-k", type=int, default=10)
     args = parser.parse_args()
 
     tracemalloc.start()
     start = time.perf_counter()
 
-    index, documents = load_index(args.index_file)
-    results = search_documents(args.query, index, documents, args.engine)
+    with open_index(args.index_file) as index:
+        scorer = BM25() if args.scorer == "bm25" else TfIdf()
+
+        results = rank_documents(
+            args.query,
+            index,
+            scorer=scorer,
+            top_k=args.top_k
+        )
+
+        terms = collect_terms(parse_query(args.query))
+
+        print(f"Query: {args.query}")
+        print(f"Scorer: {args.scorer}")
+        print(f"Results: {len(results)}")
+
+        for result in results:
+            document = index.documents[result.doc_id]
+
+            snippet = make_snippet(
+                document.path,
+                terms,
+                window=80
+            )
+
+            print(f"\n{result.score:.4f} | {result.doc_id}")
+            print(snippet)
 
     elapsed = time.perf_counter() - start
     _, peak_memory = tracemalloc.get_traced_memory()
     tracemalloc.stop()
 
-    print(f"Query: {args.query}")
-    print(f"Engine: {args.engine}")
-    print(f"Results: {len(results)}")
-    for doc_id in results[:10]:
-        print(doc_id)
-
-    print(f"Search time: {elapsed:.4f} seconds")
+    print(f"\nSearch time: {elapsed:.4f} seconds")
     print(f"Peak memory: {peak_memory / 1024 / 1024:.2f} MB")
 
 
