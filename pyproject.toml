@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Аналіз текстового корпусу з використанням генераторів та потокової обробки"
 readme = "README.md"
 authors = [
-    { name = "mariana.koliada", email = "koliami7499_aehit@students.vizja.pl" }
+    { name = "Zhenya Didtskaya", email = "9220216@stud.kai.edu.ua" }
 ]
 requires-python = ">=3.14"
 dependencies = []
