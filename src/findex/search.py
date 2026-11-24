@@ -1,19 +1,25 @@
+
 import argparse
 import time
 import tracemalloc
-from pathlib import Path
+from collections.abc import Sequence
 from heapq import nlargest
+from pathlib import Path
+from typing import Literal
 
-from findex.index_model import open_index
-from findex.scoring import TfIdf, BM25, SearchResult
-from findex.decorators import timed
-from findex.query import Term, Phrase, And, Or, Not, parse_query
-from findex.snippets import make_snippet
 from findex.cache import cached_query
+from findex.decorators import timed
+from findex.index_model import Index, Posting, open_index
+from findex.query import And, Not, Or, Phrase, Term, parse_query
+from findex.scoring import BM25, Scorer, SearchResult, TfIdf
+from findex.snippets import make_snippet
 
 
-def merge_and(left, right):
-    result = []
+def merge_and(
+    left: Sequence[Posting],
+    right: Sequence[Posting],
+) -> list[Posting]:
+    result: list[Posting] = []
     i = j = 0
 
     while i < len(left) and j < len(right):
@@ -29,8 +35,11 @@ def merge_and(left, right):
     return result
 
 
-def merge_or(left, right):
-    result = []
+def merge_or(
+    left: Sequence[Posting],
+    right: Sequence[Posting],
+) -> list[Posting]:
+    result: list[Posting] = []
     i = j = 0
 
     while i < len(left) and j < len(right):
@@ -50,13 +59,19 @@ def merge_or(left, right):
     return result
 
 
-def set_and(left, right):
-    right_ids = {p.doc_id for p in right}
-    return [p for p in left if p.doc_id in right_ids]
+def set_and(
+    left: Sequence[Posting],
+    right: Sequence[Posting],
+) -> list[Posting]:
+    right_ids = {posting.doc_id for posting in right}
+    return [posting for posting in left if posting.doc_id in right_ids]
 
 
-def set_or(left, right):
-    combined = {p.doc_id: p for p in left}
+def set_or(
+    left: Sequence[Posting],
+    right: Sequence[Posting],
+) -> list[Posting]:
+    combined = {posting.doc_id: posting for posting in left}
 
     for posting in right:
         combined.setdefault(posting.doc_id, posting)
@@ -64,8 +79,11 @@ def set_or(left, right):
     return [combined[key] for key in sorted(combined)]
 
 
-def merge_difference(left, right):
-    result = []
+def merge_difference(
+    left: Sequence[Posting],
+    right: Sequence[Posting],
+) -> list[Posting]:
+    result: list[Posting] = []
     i = j = 0
 
     while i < len(left):
@@ -85,7 +103,12 @@ def merge_difference(left, right):
     return result
 
 
-def search_documents(query, index, documents=None, engine="merge"):
+def search_documents(
+    query: str,
+    index: Index,
+    documents: dict[str, str] | None = None,
+    engine: Literal["merge", "set"] = "merge",
+) -> list[str]:
     terms = query.casefold().split()
 
     if not terms:
@@ -95,7 +118,7 @@ def search_documents(query, index, documents=None, engine="merge"):
         raise ValueError("Engine must be 'merge' or 'set'")
 
     if len(terms) == 1:
-        return [p.doc_id for p in index.get(terms[0], [])]
+        return [posting.doc_id for posting in index.get(terms[0], [])]
 
     if len(terms) == 2:
         first, second = terms
@@ -116,15 +139,19 @@ def search_documents(query, index, documents=None, engine="merge"):
         if engine == "merge":
             result = merge_difference(left, right)
         else:
-            right_ids = {p.doc_id for p in right}
-            return [p.doc_id for p in left if p.doc_id not in right_ids]
+            right_ids = {posting.doc_id for posting in right}
+            return [
+                posting.doc_id
+                for posting in left
+                if posting.doc_id not in right_ids
+            ]
     else:
         raise ValueError("Supported operators: AND, OR, NOT")
 
-    return [p.doc_id for p in result]
+    return [posting.doc_id for posting in result]
 
 
-def collect_terms(node, negated=False):
+def collect_terms(node: object, negated: bool = False) -> list[str]:
     if isinstance(node, Term):
         return [] if negated else [node.value.casefold()]
 
@@ -144,7 +171,12 @@ def collect_terms(node, negated=False):
 
 
 @timed
-def rank_documents(query, index, scorer=None, top_k=10):
+def rank_documents(
+    query: str,
+    index: Index,
+    scorer: Scorer | None = None,
+    top_k: int = 10,
+) -> list[SearchResult]:
     if scorer is None:
         scorer = TfIdf()
 
@@ -167,7 +199,7 @@ def rank_documents(query, index, scorer=None, top_k=10):
         SearchResult(
             doc_id=doc_id,
             score=score,
-            title=index.documents[doc_id].path.split("/")[-1]
+            title=index.documents[doc_id].path.split("/")[-1],
         )
         for doc_id, score in scores.items()
     ]
@@ -175,7 +207,7 @@ def rank_documents(query, index, scorer=None, top_k=10):
     return nlargest(top_k, results)
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Search an inverted index")
     parser.add_argument("index_file", type=Path)
     parser.add_argument("query")
@@ -194,7 +226,7 @@ def main():
             args.query,
             index,
             scorer=scorer,
-            top_k=args.top_k
+            top_k=args.top_k,
         )
 
         terms = collect_terms(parse_query(args.query))
@@ -209,7 +241,7 @@ def main():
             snippet = make_snippet(
                 document.path,
                 terms,
-                window=80
+                window=80,
             )
 
             print(f"\n{result.score:.4f} | {result.doc_id}")

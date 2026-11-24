@@ -1,8 +1,8 @@
 
-from pathlib import Path
-from typing import NamedTuple, Iterator
 import logging
-
+from collections.abc import Iterator
+from pathlib import Path
+from typing import NamedTuple
 
 logger = logging.getLogger(__name__)
 

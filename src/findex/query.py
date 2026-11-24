@@ -1,20 +1,23 @@
+
 import re
-from dataclasses import dataclass
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
+
+from findex.index_model import Index
 
 
 class QueryNode(ABC):
     @abstractmethod
-    def evaluate(self, index):
-        pass
+    def evaluate(self, index: Index) -> set[str]:
+        ...
 
-    def __and__(self, other):
+    def __and__(self, other: QueryNode) -> QueryNode:
         return And(self, other)
 
-    def __or__(self, other):
+    def __or__(self, other: QueryNode) -> QueryNode:
         return Or(self, other)
 
-    def __invert__(self):
+    def __invert__(self) -> QueryNode:
         return Not(self)
 
 
@@ -22,7 +25,7 @@ class QueryNode(ABC):
 class Term(QueryNode):
     value: str
 
-    def evaluate(self, index):
+    def evaluate(self, index: Index) -> set[str]:
         return {
             posting.doc_id
             for posting in index.get(self.value.casefold(), [])
@@ -33,7 +36,7 @@ class Term(QueryNode):
 class Phrase(QueryNode):
     value: str
 
-    def evaluate(self, index):
+    def evaluate(self, index: Index) -> set[str]:
         words = self.value.casefold().split()
 
         if not words:
@@ -44,10 +47,10 @@ class Phrase(QueryNode):
         for word in words[1:]:
             candidates &= Term(word).evaluate(index)
 
-        results = set()
+        results: set[str] = set()
 
         for doc_id in candidates:
-            position_lists = []
+            position_lists: list[set[int]] = []
 
             for word in words:
                 posting = next(
@@ -55,7 +58,7 @@ class Phrase(QueryNode):
                         item for item in index.get(word, [])
                         if item.doc_id == doc_id
                     ),
-                    None
+                    None,
                 )
 
                 if posting is None:
@@ -82,7 +85,7 @@ class And(QueryNode):
     left: QueryNode
     right: QueryNode
 
-    def evaluate(self, index):
+    def evaluate(self, index: Index) -> set[str]:
         return self.left.evaluate(index) & self.right.evaluate(index)
 
 
@@ -91,7 +94,7 @@ class Or(QueryNode):
     left: QueryNode
     right: QueryNode
 
-    def evaluate(self, index):
+    def evaluate(self, index: Index) -> set[str]:
         return self.left.evaluate(index) | self.right.evaluate(index)
 
 
@@ -99,26 +102,29 @@ class Or(QueryNode):
 class Not(QueryNode):
     node: QueryNode
 
-    def evaluate(self, index):
+    def evaluate(self, index: Index) -> set[str]:
         return set(index.documents) - self.node.evaluate(index)
 
 
 class QueryParser:
-    def __init__(self, query):
-        self.tokens = re.findall(r'"[^"]*"|\(|\)|[^\s()]+', query)
-        self.position = 0
+    def __init__(self, query: str) -> None:
+        self.tokens: list[str] = re.findall(
+            r'"[^"]*"|\(|\)|[^\s()]+',
+            query,
+        )
+        self.position: int = 0
 
-    def current(self):
+    def current(self) -> str | None:
         if self.position < len(self.tokens):
             return self.tokens[self.position]
         return None
 
-    def consume(self):
+    def consume(self) -> str | None:
         token = self.current()
         self.position += 1
         return token
 
-    def parse(self):
+    def parse(self) -> QueryNode:
         if not self.tokens:
             raise ValueError("Empty query")
 
@@ -129,20 +135,29 @@ class QueryParser:
 
         return result
 
-    def parse_or(self):
+    def parse_or(self) -> QueryNode:
         node = self.parse_and()
 
-        while self.current() and self.current().upper() == "OR":
+        while True:
+            token = self.current()
+
+            if token is None or token.upper() != "OR":
+                break
+
             self.consume()
             node = Or(node, self.parse_and())
 
         return node
 
-    def parse_and(self):
+    def parse_and(self) -> QueryNode:
         node = self.parse_not()
 
-        while self.current() is not None:
+        while True:
             token = self.current()
+
+            if token is None:
+                break
+
             upper = token.upper()
 
             if upper == "OR" or token == ")":
@@ -159,14 +174,16 @@ class QueryParser:
 
         return node
 
-    def parse_not(self):
-        if self.current() and self.current().upper() == "NOT":
+    def parse_not(self) -> QueryNode:
+        token = self.current()
+
+        if token is not None and token.upper() == "NOT":
             self.consume()
             return Not(self.parse_not())
 
         return self.parse_primary()
 
-    def parse_primary(self):
+    def parse_primary(self) -> QueryNode:
         token = self.current()
 
         if token is None:
@@ -196,5 +213,5 @@ class QueryParser:
         return Term(token)
 
 
-def parse_query(query):
+def parse_query(query: str) -> QueryNode:
     return QueryParser(query).parse()

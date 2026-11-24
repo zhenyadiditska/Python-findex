@@ -1,4 +1,3 @@
-
 import tracemalloc
 from collections import Counter
 from pathlib import Path
@@ -8,17 +7,18 @@ from findex.corpus import iter_documents
 from findex.tokenize import tokenize
 
 
-def analyze_greedy(data_dir: Path):
+def analyze_greedy(data_dir: Path) -> None:
     tracemalloc.start()
     start_time = perf_counter()
 
     documents = list(iter_documents(data_dir))
 
-    all_tokens = []
-    for document in documents:
-        all_tokens.extend(list(tokenize(document.text)))
+    all_tokens: list[str] = []
 
-    counter = Counter(all_tokens)
+    for document in documents:
+        all_tokens.extend(tokenize(document.text))
+
+    counter: Counter[str] = Counter(all_tokens)
 
     elapsed_time = perf_counter() - start_time
     _, peak_memory = tracemalloc.get_traced_memory()

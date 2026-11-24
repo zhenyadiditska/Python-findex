@@ -1,16 +1,19 @@
 [project]
 name = "findex"
-version = "0.1.0"
+version = "0.4.0"
 description = "Аналіз текстового корпусу з використанням генераторів та потокової обробки"
 readme = "README.md"
 authors = [
     { name = "Zhenya Didtskaya", email = "9220216@stud.kai.edu.ua" }
 ]
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "typer>=0.15.0",
+    "rich>=13.9.0",
+]
 
 [project.scripts]
-findex = "findex:main"
+findex = "findex.cli:app"
 
 [build-system]
 requires = ["uv_build>=0.13.7,<0.14.0"]
@@ -19,4 +22,23 @@ build-backend = "uv_build"
 [dependency-groups]
 dev = [
     "pytest>=9.2.0",
+    "hypothesis>=6.120.0",
+    "ruff>=0.11.0",
+    "pyright>=1.1.400",
+    "coverage>=7.17.5",
+]
+
+[tool.pyright]
+exclude = ["data"]
+typeCheckingMode = "strict"
+pythonVersion = "3.14"
+
+[tool.ruff]
+line-length = 88
+target-version = "py314"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "slow: тести, які виконуються довше однієї секунди",
 ]

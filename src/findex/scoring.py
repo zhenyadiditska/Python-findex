@@ -1,3 +1,4 @@
+
 from dataclasses import dataclass, field
 from math import log
 from typing import Protocol
@@ -11,7 +12,7 @@ class SearchResult:
     score: float
     title: str = field(default="", compare=False)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.score:.4f} - {self.title or self.doc_id}"
 
 
@@ -34,7 +35,7 @@ class TfIdf:
 
 
 class BM25:
-    def __init__(self, k1=1.5, b=0.75):
+    def __init__(self, k1: float = 1.5, b: float = 0.75) -> None:
         self.k1 = k1
         self.b = b
 

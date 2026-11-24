@@ -9,8 +9,11 @@ from findex.corpus import iter_documents
 from findex.tokenize import tokenize
 
 
-def analyze_corpus(data_dir: Path, limit: int | None = None):
-    counter = Counter()
+def analyze_corpus(
+    data_dir: Path,
+    limit: int | None = None,
+) -> None:
+    counter: Counter[str] = Counter()
     document_count = 0
     total_tokens = 0
 
@@ -28,7 +31,7 @@ def analyze_corpus(data_dir: Path, limit: int | None = None):
             total_tokens += 1
 
     elapsed_time = perf_counter() - start_time
-    current_memory, peak_memory = tracemalloc.get_traced_memory()
+    _, peak_memory = tracemalloc.get_traced_memory()
     tracemalloc.stop()
 
     print("\nCorpus statistics")
@@ -47,7 +50,7 @@ def analyze_corpus(data_dir: Path, limit: int | None = None):
     print(f"Peak memory: {peak_memory / 1024:.2f} KB")
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--limit", type=int, default=None)
     args = parser.parse_args()

@@ -1,8 +1,14 @@
+
 import re
+from collections.abc import Iterable
 from pathlib import Path
 
 
-def make_snippet(path, terms, window=80):
+def make_snippet(
+    path: str | Path,
+    terms: Iterable[str],
+    window: int = 80,
+) -> str:
     path = Path(path)
 
     try:
@@ -29,7 +35,7 @@ def make_snippet(path, terms, window=80):
             for term in sorted(words, key=len, reverse=True)
         )
         + r")(?!\w)",
-        re.IGNORECASE
+        re.IGNORECASE,
     )
 
     match = pattern.search(text)
@@ -49,5 +55,5 @@ def make_snippet(path, terms, window=80):
 
     return pattern.sub(
         lambda item: f"**{item.group()}**",
-        snippet
+        snippet,
     )

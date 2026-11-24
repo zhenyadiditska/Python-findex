@@ -1,9 +1,16 @@
+from collections.abc import Set as AbstractSet
+from typing import TypedDict
+
 from findex.index_model import open_index
+from findex.scoring import BM25, SearchResult, TfIdf
 from findex.search import rank_documents
-from findex.scoring import TfIdf, BM25
 
 
-queries = {
+class QueryData(TypedDict):
+    relevant: set[str]
+
+
+queries: dict[str, QueryData] = {
     "python": {
         "relevant": {
             "using/windows.txt",
@@ -118,7 +125,10 @@ queries = {
 }
 
 
-def precision_at_5(results, relevant):
+def precision_at_5(
+    results: list[SearchResult],
+    relevant: AbstractSet[str],
+) -> float:
     found = sum(
         1
         for result in results[:5]
@@ -131,10 +141,10 @@ def precision_at_5(results, relevant):
     return found / 5
 
 
-def main():
+def main() -> None:
     with open_index("index.bin") as index:
-        total_tfidf = 0
-        total_bm25 = 0
+        total_tfidf = 0.0
+        total_bm25 = 0.0
 
         print("Оцінювання Precision@5")
         print("Кількість документів:", index.num_docs)
@@ -150,12 +160,8 @@ def main():
                 query, index, BM25(), top_k=5
             )
 
-            tfidf_score = precision_at_5(
-                tfidf_results, relevant
-            )
-            bm25_score = precision_at_5(
-                bm25_results, relevant
-            )
+            tfidf_score = precision_at_5(tfidf_results, relevant)
+            bm25_score = precision_at_5(bm25_results, relevant)
 
             total_tfidf += tfidf_score
             total_bm25 += bm25_score

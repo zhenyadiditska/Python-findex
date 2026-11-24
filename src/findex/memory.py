@@ -1,8 +1,9 @@
-from dataclasses import dataclass
-from array import array
-from pathlib import Path
-import tracemalloc
 import gc
+import tracemalloc
+from array import array
+from collections.abc import Callable
+from dataclasses import dataclass
+from pathlib import Path
 
 from findex.index import load_index
 
@@ -19,9 +20,14 @@ class PostingSlots:
     frequency: int
 
 
-def measure_memory(name, create_data):
+def measure_memory(
+    name: str,
+    create_data: Callable[[], object],
+) -> None:
     tracemalloc.start()
+
     data = create_data()
+
     current, peak = tracemalloc.get_traced_memory()
     tracemalloc.stop()
 
@@ -33,17 +39,18 @@ def measure_memory(name, create_data):
     gc.collect()
 
 
-def main():
-    index, documents = load_index(Path("index.bin"))
+def main() -> None:
+    index = load_index(Path("index.bin"))
+    documents = index.documents
 
     doc_ids = {
         doc_id: number
         for number, doc_id in enumerate(documents)
     }
 
-    postings = [
+    postings: list[tuple[int, int]] = [
         (doc_ids[posting.doc_id], posting.frequency)
-        for posting_list in index.values()
+        for posting_list in index.postings.values()
         for posting in posting_list
     ]
 
@@ -54,7 +61,7 @@ def main():
         lambda: [
             PostingNormal(doc_id, frequency)
             for doc_id, frequency in postings
-        ]
+        ],
     )
 
     measure_memory(
@@ -62,14 +69,16 @@ def main():
         lambda: [
             PostingSlots(doc_id, frequency)
             for doc_id, frequency in postings
-        ]
+        ],
     )
 
-    def create_array():
-        data = array("I")
+    def create_array() -> array[int]:
+        data: array[int] = array("I")
+
         for doc_id, frequency in postings:
             data.append(doc_id)
             data.append(frequency)
+
         return data
 
     measure_memory("Array of unsigned integers", create_array)

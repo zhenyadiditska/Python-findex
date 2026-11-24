@@ -1,9 +1,14 @@
-from findex.index_model import Posting, open_index
-from findex.scoring import TfIdf, BM25
+from findex.index_model import Index, Posting, open_index
+from findex.scoring import BM25, TfIdf
 
 
-def check_rare_term(index):
+def check_rare_term(index: Index) -> None:
     terms = [term for term in index if index.df(term) > 0]
+
+    if not terms:
+        print("Індекс не містить термінів.")
+        return
+
     rare = min(terms, key=lambda term: index.df(term))
     common = max(terms, key=lambda term: index.df(term))
 
@@ -23,37 +28,33 @@ def check_rare_term(index):
         print(type(scorer).__name__)
         print("Оцінка рідкісного:", round(rare_score, 4))
         print("Оцінка поширеного:", round(common_score, 4))
-        print("Рідкісний термін має вищу оцінку:",
-              rare_score > common_score)
+        print("Рідкісний термін має вищу оцінку:", rare_score > common_score)
 
 
-def check_bm25_repetition(index):
+def check_bm25_repetition(index: Index) -> None:
+    if not index:
+        print("Індекс не містить термінів.")
+        return
+
     term = max(index, key=lambda item: index.df(item))
     posting = index[term][0]
     scorer = BM25()
 
-    score_1 = scorer.score(
-        term, Posting(posting.doc_id, 1), index
-    )
-    score_19 = scorer.score(
-        term, Posting(posting.doc_id, 19), index
-    )
-    score_20 = scorer.score(
-        term, Posting(posting.doc_id, 20), index
-    )
+    score_1 = scorer.score(term, Posting(posting.doc_id, 1), index)
+    score_19 = scorer.score(term, Posting(posting.doc_id, 19), index)
+    score_20 = scorer.score(term, Posting(posting.doc_id, 20), index)
 
     print("\n2. Насичення BM25")
     print("Термін:", term)
     print("1 повторення:", round(score_1, 4))
     print("19 повторень:", round(score_19, 4))
     print("20 повторень:", round(score_20, 4))
-    print("Приріст між 19 і 20:",
-          round(score_20 - score_19, 6))
+    print("Приріст між 19 і 20:", round(score_20 - score_19, 6))
 
 
-def check_document_length(index):
-    best_pair = None
-    best_ratio = 1
+def check_document_length(index: Index) -> None:
+    best_pair: tuple[str, Posting, Posting] | None = None
+    best_ratio = 1.0
 
     for term, postings in index.items():
         single_matches = [
@@ -66,7 +67,7 @@ def check_document_length(index):
 
         ordered = sorted(
             single_matches,
-            key=lambda posting: index.doc_length(posting.doc_id)
+            key=lambda posting: index.doc_length(posting.doc_id),
         )
 
         short = ordered[0]
@@ -104,11 +105,10 @@ def check_document_length(index):
     print("\nДовгий документ:", long.doc_id)
     print("Довжина:", index.doc_length(long.doc_id))
     print("Оцінка:", round(long_score, 4))
-    print("\nКороткий документ має вищу оцінку:",
-          short_score > long_score)
+    print("\nКороткий документ має вищу оцінку:", short_score > long_score)
 
 
-def main():
+def main() -> None:
     with open_index("index.bin") as index:
         print(index)
         check_rare_term(index)

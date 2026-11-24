@@ -18,3 +18,7 @@ data/
 # Generated indexes
 index.bin
 index.json
+
+# Coverage report
+.coverage
+htmlcov/

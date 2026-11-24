@@ -1,12 +1,12 @@
+from findex.index_model import DocMeta, Index, Posting
 from findex.query import (
-    parse_query,
-    Term,
-    Phrase,
     And,
-    Or,
     Not,
+    Or,
+    Phrase,
+    Term,
+    parse_query,
 )
-from findex.index_model import Index, Posting, DocMeta
 
 
 def create_test_index():
